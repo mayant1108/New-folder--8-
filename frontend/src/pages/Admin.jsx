@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../App';
+import {
+  authAPI,
+  formatINR,
+  getProductId,
+  normalizeOrdersResponse,
+  normalizeProductsResponse,
+  ordersAPI,
+  productsAPI
+} from '../utils/api';
 import './Admin.css';
 
 function Admin() {
@@ -11,6 +20,7 @@ function Admin() {
   const [products, setProducts] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // New product form
   const [showProductForm, setShowProductForm] = useState(false);
@@ -38,17 +48,18 @@ function Admin() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [ordersRes, productsRes, usersRes] = await Promise.all([
-        fetch('/api/admin/orders'),
-        fetch('/api/products'),
-        fetch('/api/admin/users')
+      const [ordersData, productsData, usersData] = await Promise.all([
+        ordersAPI.getAll(),
+        productsAPI.getAll(),
+        authAPI.getUsers()
       ]);
       
-      setOrders(await ordersRes.json());
-      setProducts(await productsRes.json());
-      setUsers(await usersRes.json());
+      setOrders(normalizeOrdersResponse(ordersData));
+      setProducts(normalizeProductsResponse(productsData));
+      setUsers(Array.isArray(usersData) ? usersData : []);
     } catch (error) {
       console.error('Error fetching data:', error);
+      showToast(error.message || 'Unable to fetch admin data', 'error');
     } finally {
       setLoading(false);
     }
@@ -58,16 +69,11 @@ function Admin() {
     if (!confirm('Are you sure you want to delete this product?')) return;
     
     try {
-      const response = await fetch(`/api/products/${productId}`, {
-        method: 'DELETE'
-      });
-      
-      if (response.ok) {
-        showToast('Product deleted successfully', 'success');
-        fetchData();
-      }
+      await productsAPI.delete(productId);
+      showToast('Product deleted successfully', 'success');
+      fetchData();
     } catch (error) {
-      showToast('Failed to delete product', 'error');
+      showToast(error.message || 'Failed to delete product', 'error');
     }
   };
 
@@ -83,48 +89,34 @@ function Admin() {
         images: productForm.images.filter(img => img.trim() !== '')
       };
       
-      const response = await fetch('/api/products', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(productData)
+      await productsAPI.create(productData);
+      showToast('Product created successfully', 'success');
+      setShowProductForm(false);
+      setProductForm({
+        name: '',
+        description: '',
+        price: '',
+        originalPrice: '',
+        category: 'Electronics',
+        stock: '',
+        images: [''],
+        featured: false,
+        sizes: [],
+        colors: []
       });
-      
-      if (response.ok) {
-        showToast('Product created successfully', 'success');
-        setShowProductForm(false);
-        setProductForm({
-          name: '',
-          description: '',
-          price: '',
-          originalPrice: '',
-          category: 'Electronics',
-          stock: '',
-          images: [''],
-          featured: false,
-          sizes: [],
-          colors: []
-        });
-        fetchData();
-      }
+      fetchData();
     } catch (error) {
-      showToast('Failed to create product', 'error');
+      showToast(error.message || 'Failed to create product', 'error');
     }
   };
 
   const updateOrderStatus = async (orderId, status) => {
     try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status })
-      });
-      
-      if (response.ok) {
-        showToast('Order status updated', 'success');
-        fetchData();
-      }
+      await ordersAPI.updateStatus(orderId, status);
+      showToast('Order status updated', 'success');
+      fetchData();
     } catch (error) {
-      showToast('Failed to update status', 'error');
+      showToast(error.message || 'Failed to update status', 'error');
     }
   };
 
@@ -146,74 +138,102 @@ function Admin() {
   return (
     <div className="admin-page">
       <div className="container">
-        <div className="admin-header">
-          <h1>Admin Dashboard</h1>
-          <p>Manage your store</p>
+        <div className="admin-header animate-slide-down">
+          <div className="header-content">
+            <h1>Admin Dashboard</h1>
+            <p>Manage your store</p>
+          </div>
+          
+          {/* Mobile Menu Button */}
+          <button 
+            className="mobile-menu-btn"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          >
+            <span className="hamburger-icon">
+              {mobileMenuOpen ? '✕' : '☰'}
+            </span>
+          </button>
         </div>
 
         <div className="admin-layout">
           {/* Sidebar */}
-          <aside className="admin-sidebar">
+          <aside className={`admin-sidebar ${mobileMenuOpen ? 'open' : ''}`}>
             <nav className="admin-nav">
               <button 
-                className={activeTab === 'dashboard' ? 'active' : ''}
-                onClick={() => setActiveTab('dashboard')}
+                className={`nav-item ${activeTab === 'dashboard' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('dashboard');
+                  setMobileMenuOpen(false);
+                }}
               >
-                <span>📊</span> Dashboard
+                <span className="nav-icon">📊</span>
+                <span className="nav-text">Dashboard</span>
               </button>
               <button 
-                className={activeTab === 'orders' ? 'active' : ''}
-                onClick={() => setActiveTab('orders')}
+                className={`nav-item ${activeTab === 'orders' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('orders');
+                  setMobileMenuOpen(false);
+                }}
               >
-                <span>📦</span> Orders
+                <span className="nav-icon">📦</span>
+                <span className="nav-text">Orders</span>
               </button>
               <button 
-                className={activeTab === 'products' ? 'active' : ''}
-                onClick={() => setActiveTab('products')}
+                className={`nav-item ${activeTab === 'products' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('products');
+                  setMobileMenuOpen(false);
+                }}
               >
-                <span>🛍️</span> Products
+                <span className="nav-icon">🛍️</span>
+                <span className="nav-text">Products</span>
               </button>
               <button 
-                className={activeTab === 'users' ? 'active' : ''}
-                onClick={() => setActiveTab('users')}
+                className={`nav-item ${activeTab === 'users' ? 'active' : ''}`}
+                onClick={() => {
+                  setActiveTab('users');
+                  setMobileMenuOpen(false);
+                }}
               >
-                <span>👥</span> Users
+                <span className="nav-icon">👥</span>
+                <span className="nav-text">Users</span>
               </button>
             </nav>
           </aside>
 
           {/* Main Content */}
-          <div className="admin-main">
+          <div className="admin-main animate-fade-in">
             {/* Dashboard Tab */}
             {activeTab === 'dashboard' && (
-              <div className="admin-section">
+              <div className="admin-section slide-in">
                 <h2>Overview</h2>
                 <div className="stats-grid">
-                  <div className="stat-card">
+                  <div className="stat-card animate-scale-in" style={{animationDelay: '0.1s'}}>
                     <span className="stat-icon">📦</span>
                     <div className="stat-info">
                       <span className="stat-number">{orders.length}</span>
                       <span className="stat-label">Total Orders</span>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card animate-scale-in" style={{animationDelay: '0.2s'}}>
                     <span className="stat-icon">🛍️</span>
                     <div className="stat-info">
                       <span className="stat-number">{products.length}</span>
                       <span className="stat-label">Products</span>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card animate-scale-in" style={{animationDelay: '0.3s'}}>
                     <span className="stat-icon">👥</span>
                     <div className="stat-info">
                       <span className="stat-number">{users.length}</span>
                       <span className="stat-label">Users</span>
                     </div>
                   </div>
-                  <div className="stat-card">
+                  <div className="stat-card animate-scale-in" style={{animationDelay: '0.4s'}}>
                     <span className="stat-icon">💰</span>
                     <div className="stat-info">
-                      <span className="stat-number">${orders.reduce((sum, o) => sum + o.total, 0).toFixed(2)}</span>
+                      <span className="stat-number">{formatINR(orders.reduce((sum, o) => sum + o.total, 0))}</span>
                       <span className="stat-label">Total Revenue</span>
                     </div>
                   </div>
@@ -223,15 +243,15 @@ function Admin() {
 
             {/* Orders Tab */}
             {activeTab === 'orders' && (
-              <div className="admin-section">
+              <div className="admin-section slide-in">
                 <h2>All Orders</h2>
                 {loading ? (
-                  <div className="flex-center" style={{ padding: '40px' }}>
+                  <div className="flex-center loading-container">
                     <div className="spinner"></div>
                   </div>
                 ) : (
-                  <div className="admin-table">
-                    <table>
+                  <div className="table-responsive">
+                    <table className="admin-table animate-fade-in">
                       <thead>
                         <tr>
                           <th>Order ID</th>
@@ -243,12 +263,12 @@ function Admin() {
                         </tr>
                       </thead>
                       <tbody>
-                        {orders.map(order => (
-                          <tr key={order.id}>
-                            <td>#{order.id.slice(0, 8)}</td>
-                            <td>{order.shippingAddress?.firstName} {order.shippingAddress?.lastName}</td>
+                        {orders.map((order, index) => (
+                          <tr key={order.id} className="animate-slide-in" style={{animationDelay: `${index * 0.05}s`}}>
+                            <td>#{String(order.id).slice(0, 8)}</td>
+                            <td>{order.shippingAddress?.fullName || order.user?.name || 'Customer'}</td>
                             <td>{order.items?.length || 0} items</td>
-                            <td>${order.total?.toFixed(2)}</td>
+                            <td>{formatINR(order.total)}</td>
                             <td>
                               <span className={`status-badge ${getStatusColor(order.status)}`}>
                                 {order.status}
@@ -278,11 +298,11 @@ function Admin() {
 
             {/* Products Tab */}
             {activeTab === 'products' && (
-              <div className="admin-section">
+              <div className="admin-section slide-in">
                 <div className="section-header">
                   <h2>All Products</h2>
                   <button 
-                    className="btn btn-primary"
+                    className="btn btn-primary animate-pulse"
                     onClick={() => setShowProductForm(!showProductForm)}
                   >
                     {showProductForm ? 'Cancel' : '+ Add Product'}
@@ -291,7 +311,7 @@ function Admin() {
 
                 {/* Product Form */}
                 {showProductForm && (
-                  <form onSubmit={handleCreateProduct} className="product-form">
+                  <form onSubmit={handleCreateProduct} className="product-form animate-slide-down">
                     <div className="form-row">
                       <div className="input-group">
                         <label>Product Name</label>
@@ -301,6 +321,7 @@ function Admin() {
                           onChange={(e) => setProductForm({ ...productForm, name: e.target.value })}
                           required
                           className="input-field"
+                          placeholder="Enter product name"
                         />
                       </div>
                       <div className="input-group">
@@ -328,39 +349,46 @@ function Admin() {
                         required
                         className="input-field"
                         rows="3"
+                        placeholder="Enter product description"
                       />
                     </div>
                     
                     <div className="form-row">
                       <div className="input-group">
-                        <label>Price</label>
+                        <label>Price ($)</label>
                         <input
                           type="number"
                           step="0.01"
+                          min="0"
                           value={productForm.price}
                           onChange={(e) => setProductForm({ ...productForm, price: e.target.value })}
                           required
                           className="input-field"
+                          placeholder="0.00"
                         />
                       </div>
                       <div className="input-group">
-                        <label>Original Price</label>
+                        <label>Original Price ($)</label>
                         <input
                           type="number"
                           step="0.01"
+                          min="0"
                           value={productForm.originalPrice}
                           onChange={(e) => setProductForm({ ...productForm, originalPrice: e.target.value })}
                           className="input-field"
+                          placeholder="0.00"
                         />
                       </div>
                       <div className="input-group">
                         <label>Stock</label>
                         <input
                           type="number"
+                          min="0"
                           value={productForm.stock}
                           onChange={(e) => setProductForm({ ...productForm, stock: e.target.value })}
                           required
                           className="input-field"
+                          placeholder="0"
                         />
                       </div>
                     </div>
@@ -377,15 +405,15 @@ function Admin() {
                       />
                     </div>
                     
-                    <button type="submit" className="btn btn-primary">
+                    <button type="submit" className="btn btn-primary btn-full">
                       Create Product
                     </button>
                   </form>
                 )}
 
                 {/* Products Table */}
-                <div className="admin-table">
-                  <table>
+                <div className="table-responsive">
+                  <table className="admin-table animate-fade-in">
                     <thead>
                       <tr>
                         <th>Product</th>
@@ -396,21 +424,29 @@ function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map(product => (
-                        <tr key={product.id}>
+                      {products.map((product, index) => (
+                        <tr key={getProductId(product)} className="animate-slide-in" style={{animationDelay: `${index * 0.05}s`}}>
                           <td>
                             <div className="product-cell">
-                              <img src={product.images[0]} alt={product.name} />
-                              <span>{product.name}</span>
+                              <img src={product.images?.[0] || 'https://via.placeholder.com/60'} alt={product.name} className="product-thumbnail" />
+                              <span className="product-name">{product.name}</span>
                             </div>
                           </td>
-                          <td>{product.category}</td>
-                          <td>${product.price.toFixed(2)}</td>
-                          <td>{product.stock}</td>
+                          <td>
+                            <span className="category-badge">{product.category}</span>
+                          </td>
+                          <td>
+                            <span className="price">{formatINR(product.price * 83)}</span>
+                          </td>
+                          <td>
+                            <span className={`stock-badge ${product.stock > 0 ? 'in-stock' : 'out-of-stock'}`}>
+                              {product.stock > 0 ? `${product.stock} in stock` : 'Out of stock'}
+                            </span>
+                          </td>
                           <td>
                             <button 
-                              className="btn btn-sm btn-outline"
-                              onClick={() => handleDeleteProduct(product.id)}
+                              className="btn btn-sm btn-outline delete-btn"
+                              onClick={() => handleDeleteProduct(getProductId(product))}
                             >
                               Delete
                             </button>
@@ -425,10 +461,10 @@ function Admin() {
 
             {/* Users Tab */}
             {activeTab === 'users' && (
-              <div className="admin-section">
+              <div className="admin-section slide-in">
                 <h2>All Users</h2>
-                <div className="admin-table">
-                  <table>
+                <div className="table-responsive">
+                  <table className="admin-table animate-fade-in">
                     <thead>
                       <tr>
                         <th>Name</th>
@@ -438,9 +474,16 @@ function Admin() {
                       </tr>
                     </thead>
                     <tbody>
-                      {users.map(u => (
-                        <tr key={u.id}>
-                          <td>{u.name}</td>
+                      {users.map((u, index) => (
+                        <tr key={u.id || u._id} className="animate-slide-in" style={{animationDelay: `${index * 0.05}s`}}>
+                          <td>
+                            <div className="user-cell">
+                              <div className="user-avatar">
+                                {u.name?.charAt(0).toUpperCase()}
+                              </div>
+                              <span>{u.name}</span>
+                            </div>
+                          </td>
                           <td>{u.email}</td>
                           <td>
                             <span className={`role-badge ${u.role}`}>

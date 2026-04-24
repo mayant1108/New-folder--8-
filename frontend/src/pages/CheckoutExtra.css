@@ -1,0 +1,58 @@
+/* Payment Success Screen */
+.payment-success {
+  text-align: center;
+  background: white;
+  border-radius: 20px;
+  padding: 60px 40px;
+  max-width: 500px;
+  margin: 40px auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.payment-success .success-icon {
+  font-size: 5rem;
+  margin-bottom: 20px;
+}
+
+.payment-success h2 {
+  font-size: 2rem;
+  color: #10b981;
+  margin-bottom: 15px;
+}
+
+.payment-success p {
+  color: #6b7280;
+  font-size: 1.1rem;
+  margin-bottom: 20px;
+}
+
+.payment-success .order-number {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin: 25px 0;
+}
+
+/* QR Code Scanner */
+.qr-scanner-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.qr-scanner-content {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+}

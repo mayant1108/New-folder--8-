@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../App';
+import { LuPackageCheck } from "react-icons/lu";
+import { getCategorySlug, getProductId, normalizeProductsResponse } from '../utils/api';
 import './ProductDetail.css';
 
 function ProductDetail() {
   const { id } = useParams();
   const { addToCart } = useApp();
+  const navigate = useNavigate();
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
@@ -44,8 +47,10 @@ function ProductDetail() {
 
       // Fetch related products
       const relatedRes = await fetch(`/api/products?category=${data.category}`);
-      const relatedData = await relatedRes.json();
-      setRelatedProducts(relatedData.filter(p => p.id !== id).slice(0, 4));
+      const relatedData = normalizeProductsResponse(await relatedRes.json());
+      setRelatedProducts(
+        relatedData.filter((item) => getProductId(item) !== getProductId(data)).slice(0, 4)
+      );
     } catch (error) {
       console.error('Error fetching product:', error);
     } finally {
@@ -53,9 +58,16 @@ function ProductDetail() {
     }
   };
 
-  const handleAddToCart = () => {
+  const handleAddToCart = async () => {
     if (product) {
-      addToCart(product, quantity, selectedSize, selectedColor);
+      await addToCart(product, quantity, selectedSize, selectedColor);
+    }
+  };
+
+  const handleOrder = async () => {
+    if (product) {
+      await addToCart(product, quantity, selectedSize, selectedColor);
+      navigate('/checkout');
     }
   };
 
@@ -85,7 +97,7 @@ function ProductDetail() {
           <span>/</span>
           <Link to="/products">Products</Link>
           <span>/</span>
-          <Link to={`/products?category=${product.category.toLowerCase()}`}>{product.category}</Link>
+          <Link to={`/products?category=${getCategorySlug(product.category)}`}>{product.category}</Link>
           <span>/</span>
           <span>{product.name}</span>
         </div>
@@ -131,9 +143,9 @@ function ProductDetail() {
             </div>
 
             <div className="detail-price">
-              <span className="price">${product.price.toFixed(2)}</span>
+              <span className="price">₹{(product.price * 83).toFixed(0)}</span>
               {product.originalPrice > product.price && (
-                <span className="original-price">${product.originalPrice.toFixed(2)}</span>
+                <span className="original-price">₹{(product.originalPrice * 83).toFixed(0)}</span>
               )}
             </div>
 
@@ -204,6 +216,10 @@ function ProductDetail() {
                 </svg>
                 Add to Cart
               </button>
+              <button className="btn btn-primary btn-lg w-full" onClick={handleOrder}>
+                <LuPackageCheck className='icon' />
+                Order Now
+              </button>
             </div>
 
             {/* Features */}
@@ -252,8 +268,8 @@ function ProductDetail() {
             <div className="products-grid">
               {relatedProducts.map((prod, index) => (
                 <Link
-                  to={`/products/${prod.id}`}
-                  key={prod.id}
+                  to={`/products/${getProductId(prod)}`}
+                  key={getProductId(prod)}
                   className="product-card"
                   style={{ animationDelay: `${index * 0.05}s` }}
                 >
@@ -263,7 +279,7 @@ function ProductDetail() {
                   <div className="product-info">
                     <h3 className="product-name">{prod.name}</h3>
                     <div className="product-price">
-                      <span className="price">${prod.price.toFixed(2)}</span>
+                      <span className="price">₹{(prod.price * 83).toFixed(0)}</span>
                     </div>
                   </div>
                 </Link>

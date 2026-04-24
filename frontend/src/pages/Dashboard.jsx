@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useApp } from '../App';
+import { formatINR, normalizeOrdersResponse, ordersAPI } from '../utils/api';
 import './Dashboard.css';
 
 function Dashboard() {
@@ -19,13 +20,13 @@ function Dashboard() {
 
   const fetchOrders = async () => {
     try {
-      const response = await fetch('/api/orders', {
-        headers: { 'user-id': user?.id }
-      });
-      const data = await response.json();
-      setOrders(data);
+      setLoading(true);
+      const data = await ordersAPI.getMyOrders();
+      setOrders(normalizeOrdersResponse(data));
     } catch (error) {
       console.error('Error fetching orders:', error);
+      setOrders([]);
+      showToast(error.message || 'Unable to fetch orders', 'error');
     } finally {
       setLoading(false);
     }
@@ -59,7 +60,7 @@ function Dashboard() {
           <aside className="dashboard-sidebar">
             <div className="user-info">
               <div className="user-avatar">
-                {user.name.charAt(0).toUpperCase()}
+                {(user.name || 'U').charAt(0).toUpperCase()}
               </div>
               <h3>{user.name}</h3>
               <p>{user.email}</p>
@@ -112,7 +113,7 @@ function Dashboard() {
               <div className="stat-card">
                 <span className="stat-icon">💰</span>
                 <div className="stat-info">
-                  <span className="stat-number">${orders.reduce((sum, o) => sum + o.total, 0).toFixed(2)}</span>
+                  <span className="stat-number">{formatINR(orders.reduce((sum, o) => sum + (o.total || 0), 0))}</span>
                   <span className="stat-label">Total Spent</span>
                 </div>
               </div>
@@ -141,7 +142,7 @@ function Dashboard() {
                     <div key={order.id} className="order-card">
                       <div className="order-header">
                         <div className="order-id">
-                          <span>Order #{order.id.slice(0, 8)}</span>
+                          <span>Order #{String(order.id).slice(0, 8)}</span>
                           <span className="order-date">
                             {new Date(order.createdAt).toLocaleDateString()}
                           </span>
@@ -155,8 +156,8 @@ function Dashboard() {
                         {order.items.slice(0, 3).map((item, index) => (
                           <img 
                             key={index}
-                            src={item.product?.images?.[0] || 'https://via.placeholder.com/60'} 
-                            alt={item.product?.name || 'Product'}
+                            src={item.product?.images?.[0] || item.image || 'https://via.placeholder.com/60'} 
+                            alt={item.product?.name || item.name || 'Product'}
                           />
                         ))}
                         {order.items.length > 3 && (
@@ -165,7 +166,7 @@ function Dashboard() {
                       </div>
                       
                       <div className="order-footer">
-                        <span className="order-total">${order.total.toFixed(2)}</span>
+                        <span className="order-total">{formatINR(order.total || 0)}</span>
                         <button className="btn btn-sm btn-outline">
                           View Details
                         </button>

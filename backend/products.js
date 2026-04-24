@@ -1434,3 +1434,6 @@ export const products = [
     description: 'Speed jump rope with ball bearings.',
     price: 14.99,
     originalPrice: 24
+
+  }
+]
